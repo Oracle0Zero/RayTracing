@@ -14,6 +14,7 @@ public:
     std::string name;
     int specular;
     bool exists;
+    float reflective;
 
     Sphere()
     {

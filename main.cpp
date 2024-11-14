@@ -19,27 +19,31 @@ int camera_y = 0;
 int camerz_z = 0;
 glm::vec3 camera_vector(camera_x, camera_y, camerz_z);
 
-float inf = 5000;
+float inf = 100000;
+int recursion_depth = 3;
     
 std::vector<Sphere> spheres;
 std::vector<Light> lights;
 
 void PutPixel(sf::RenderWindow& window, int x, int y, sf::Color color);
 glm::vec3 CanvasToViewPort(int x, int y);
-sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max);
+sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, int recursion_depth);
 void IntersectRaySphere(glm::vec3 camera_vector, glm::vec3 view_direction_vector, Sphere& sphere, float& t1, float& t2);
 float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_direction_vector, int shininess);
+void ClosestIntersection(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, Sphere& closest_sphere, float& closest_t);
+glm::vec3 ReflectRay(glm::vec3 ray, glm::vec3 normal);
 
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(canvas_width, canvas_height), "SFML works!");
-
+    
     Sphere sphere_1;
     sphere_1.location = glm::vec3(0, -1, 3);
     sphere_1.radius = 1;
     sphere_1.color = sf::Color::Red;
     sphere_1.name = "Red";
     sphere_1.specular = 500;
+    sphere_1.reflective = 0.2f;
     spheres.push_back(sphere_1);
 
     Sphere sphere_2;
@@ -48,6 +52,7 @@ int main()
     sphere_2.color = sf::Color::Blue;
     sphere_2.name = "Blue";
     sphere_2.specular = 500;
+    sphere_2.reflective = 0.3f;
     spheres.push_back(sphere_2);
 
     Sphere sphere_3;
@@ -56,14 +61,16 @@ int main()
     sphere_3.color = sf::Color::Green;
     sphere_3.name = "Green";
     sphere_3.specular = 10;
+    sphere_3.reflective = 0.4f;
     spheres.push_back(sphere_3);
-
+    
     Sphere sphere_4;
     sphere_4.location = glm::vec3(0, -5001, 0);
     sphere_4.radius = 5000;
     sphere_4.color = sf::Color::Yellow;
     sphere_4.name = "Yellow";
     sphere_4.specular = 1000;
+    sphere_4.reflective = 0.5f;
     spheres.push_back(sphere_4);
 
     Light ambient;
@@ -101,7 +108,7 @@ int main()
             {
                 glm::vec3 viewport_vector = CanvasToViewPort(i, j);
                 glm::vec3 view_direction_vector = viewport_vector - camera_vector;
-                sf::Color color = TraceRay(camera_vector, view_direction_vector, 1, inf);
+                sf::Color color = TraceRay(camera_vector, view_direction_vector, 1.0f, inf, recursion_depth);
                 PutPixel(window, i, j, color);
             }
         }
@@ -132,32 +139,14 @@ glm::vec3 CanvasToViewPort(int x, int y)
     return glm::vec3(v_x, v_y, d);
 }
 
-sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max)
+sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, int recursion_depth)
 {
     float closest_t = inf;
     Sphere closest_sphere;
 
     float t1, t2;
 
-    for (Sphere sphere : spheres)
-    {
-        //std::cout << sphere.name << "\n";
-        IntersectRaySphere(camera_vector, view_direction_vector, sphere, t1, t2);
-        //std::cout << "t1: " << t1 << " t2: " << t2 << std::endl;
-        //printf("t1: %f, t2: %f\n", t1, t2);
-        if (t_min < t1 && t1 < t_max && t1 < closest_t)
-        {
-            closest_t = t1;
-            closest_sphere = sphere;
-            closest_sphere.exists = true;
-        }
-        if (t_min < t2 && t2 < t_max && t2 < closest_t)
-        {
-            closest_t = t2;
-            closest_sphere = sphere;
-            closest_sphere.exists = true;
-        }
-    }
+    ClosestIntersection(camera_vector, view_direction_vector, t_min, t_max, closest_sphere, closest_t);
 
     if(!closest_sphere.exists)
     {
@@ -199,9 +188,43 @@ sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, flo
     {
         final_color.b = static_cast<uint8_t>(blue);
     }
+    // ---------------------------------
+    float r = closest_sphere.reflective;
+    
+    if(recursion_depth <= 0 || r <= 0)
+    {
+        return final_color;
+    }
+    
+    glm::vec3 R = ReflectRay(-view_direction_vector, normal);
+    sf::Color reflected_color = TraceRay(point, R, 0.001f, inf, recursion_depth - 1);
 
-
-
+    red = final_color.r * (1 - r) + reflected_color.r * r;
+    green = final_color.g * (1 - r) + reflected_color.g * r;
+    blue = final_color.b * (1 - r) + reflected_color.b * r;
+    
+    if(red > 255)
+    {
+        final_color.r = 255;
+    }else
+    {
+        final_color.r = static_cast<uint8_t>(red);
+    }
+    if(green > 255)
+    {
+        final_color.g = 255;
+    }else
+    {
+        final_color.g = static_cast<uint8_t>(green);
+    }
+    if(blue > 255)
+    {
+        final_color.b = 255;
+    }else
+    {
+        final_color.b = static_cast<uint8_t>(blue);
+    }
+    
     return final_color;
 }
 
@@ -238,7 +261,7 @@ void IntersectRaySphere(glm::vec3 camera_vector, glm::vec3 view_direction_vector
 float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_direction_vector, int shininess)
 {
     float intensity = 0;
-
+    float t_max = inf;
     for(Light& light : lights)
     {
         if(light.type == LightType::AMBIENT)
@@ -250,9 +273,20 @@ float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_directio
             if(light.type == LightType::POINT)
             {
                 l = light.position - point;
+                t_max = 1;
             }else
             {
                 l = light.direction;
+                t_max = inf;
+            }
+
+            // Shadow Check
+            Sphere shadow_sphere;
+            float shadow_t;
+            ClosestIntersection(point, l, 0.001f, t_max, shadow_sphere, shadow_t);
+            if(shadow_sphere.exists)
+            {
+                continue;
             }
 
             // Diffuse
@@ -260,14 +294,12 @@ float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_directio
             if(n_dot_l > 0)
             {
                 intensity += light.intensity * (n_dot_l / (glm::length(normal) * glm::length(l)));
-                
-
             }
 
             // Specular
             if(shininess != -1)
             {
-                glm::vec3 reflection_vector = (2.0f * normal * glm::dot(normal, l)) - l;
+                glm::vec3 reflection_vector = ReflectRay(l, normal);
                 float r_dot_v = glm::dot(reflection_vector, view_direction_vector);
                 
                 if(r_dot_v > 0)
@@ -281,4 +313,32 @@ float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_directio
     }
 
     return intensity;
+}
+
+void ClosestIntersection(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, Sphere& closest_sphere, float& closest_t)
+{
+    closest_t = inf;
+    float t1, t2;
+    for(Sphere sphere : spheres)
+    {
+        IntersectRaySphere(camera_vector, view_direction_vector, sphere, t1, t2);
+        if (t_min < t1 && t1 < t_max && t1 < closest_t)
+        {
+            closest_t = t1;
+            closest_sphere = sphere;
+            closest_sphere.exists = true;
+        }
+        if (t_min < t2 && t2 < t_max && t2 < closest_t)
+        {
+            closest_t = t2;
+            closest_sphere = sphere;
+            closest_sphere.exists = true;
+        }
+    }
+}
+
+glm::vec3 ReflectRay(glm::vec3 ray, glm::vec3 normal)
+{
+    glm::vec3 reflected_ray = (2.0f * normal * glm::dot(normal, ray)) - ray;
+    return reflected_ray;
 }
