@@ -1,5 +1,6 @@
 #include <SFML/Graphics.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -19,13 +20,13 @@ int camera_y = 0;
 int camerz_z = 0;
 glm::vec3 camera_vector(camera_x, camera_y, camerz_z);
 
-float inf = 100000;
+float inf = 10000000.0f;
 int recursion_depth = 3;
     
 std::vector<Sphere> spheres;
 std::vector<Light> lights;
 
-void PutPixel(sf::RenderWindow& window, int x, int y, sf::Color color);
+void PutPixel(sf::RenderWindow& window, sf::RectangleShape& pixel, int x, int y, sf::Color color);
 glm::vec3 CanvasToViewPort(int x, int y);
 sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, int recursion_depth);
 void IntersectRaySphere(glm::vec3 camera_vector, glm::vec3 view_direction_vector, Sphere& sphere, float& t1, float& t2);
@@ -91,6 +92,8 @@ int main()
     lights.push_back(directional);
     
 
+    sf::RectangleShape pixel(sf::Vector2f(1, 1));
+
     while (window.isOpen())
     {
         sf::Event event;
@@ -107,9 +110,9 @@ int main()
             for (int j = (- canvas_height / 2); (j < canvas_height / 2); ++j)
             {
                 glm::vec3 viewport_vector = CanvasToViewPort(i, j);
-                glm::vec3 view_direction_vector = viewport_vector - camera_vector;
+                glm::vec3 view_direction_vector = viewport_vector + glm::vec3(0, 0, -0.5);
                 sf::Color color = TraceRay(camera_vector, view_direction_vector, 1.0f, inf, recursion_depth);
-                PutPixel(window, i, j, color);
+                PutPixel(window, pixel, i, j, color);
             }
         }
 
@@ -119,12 +122,12 @@ int main()
     return 0;
 }
 
-void PutPixel(sf::RenderWindow& window, int x, int y, sf::Color color)
+void PutPixel(sf::RenderWindow& window, sf::RectangleShape& pixel, int x, int y, sf::Color color)
 {
     float c_x = (float)canvas_width / 2 + x;
     float c_y = (float)canvas_height / 2 - y;
     
-    sf::RectangleShape pixel(sf::Vector2f(1, 1));
+    //sf::RectangleShape pixel(sf::Vector2f(1, 1));
     pixel.setPosition(c_x, c_y);
     pixel.setFillColor(color);
 
@@ -159,7 +162,7 @@ sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, flo
     normal = glm::normalize(normal);
 
     sf::Color final_color = closest_sphere.color;
-    float light_intensity = ComputeLighting(point, normal, -1.0f * view_direction_vector, closest_sphere.specular);
+    float light_intensity = ComputeLighting(point, normal, -view_direction_vector, closest_sphere.specular);
 
 
     float red = final_color.r * light_intensity;
@@ -168,7 +171,16 @@ sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, flo
         final_color.r = 255;
     }else
     {
+        
         final_color.r = static_cast<uint8_t>(red);
+        /*
+        if(closest_sphere.name == "Yellow")
+        {
+            printf("red: %f\n", red);
+            printf("final_color.r: %d\n", final_color.r);
+        }
+        */
+
     }
     
     float green = final_color.g * light_intensity;
