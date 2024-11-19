@@ -8,16 +8,16 @@
 class Sphere
 {
 public:
-    glm::vec3 location;
+    glm::vec3 center;
     float radius;
     sf::Color color;
     std::string name;
     int specular;
-    bool exists;
+    bool null;
     float reflective;
 
     Sphere()
     {
-        exists = false;
+        null = false;
     };
 };

@@ -18,7 +18,7 @@ int d = 1;
 int camera_x = 0;
 int camera_y = 0;
 int camerz_z = 0;
-glm::vec3 camera_vector(camera_x, camera_y, camerz_z);
+glm::vec3 O(camera_x, camera_y, camerz_z);
 
 float inf = 10000000.0f;
 int recursion_depth = 3;
@@ -28,7 +28,7 @@ std::vector<Light> lights;
 
 void PutPixel(sf::RenderWindow& window, sf::RectangleShape& pixel, int x, int y, sf::Color color);
 glm::vec3 CanvasToViewPort(int x, int y);
-sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, int recursion_depth);
+sf::Color TraceRay(glm::vec3 O, glm::vec3 D, float t_min, float t_max, int recursion_depth);
 void IntersectRaySphere(glm::vec3 camera_vector, glm::vec3 view_direction_vector, Sphere& sphere, float& t1, float& t2);
 float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_direction_vector, int shininess);
 void ClosestIntersection(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, Sphere& closest_sphere, float& closest_t);
@@ -110,8 +110,8 @@ int main()
             for (int j = (- canvas_height / 2); (j < canvas_height / 2); ++j)
             {
                 glm::vec3 viewport_vector = CanvasToViewPort(i, j);
-                glm::vec3 view_direction_vector = viewport_vector + glm::vec3(0, 0, -0.5);
-                sf::Color color = TraceRay(camera_vector, view_direction_vector, 1.0f, inf, recursion_depth);
+                glm::vec3 D = viewport_vector - O;
+                sf::Color color = TraceRay(O, D, 1.0f, inf, recursion_depth);
                 PutPixel(window, pixel, i, j, color);
             }
         }
@@ -142,27 +142,28 @@ glm::vec3 CanvasToViewPort(int x, int y)
     return glm::vec3(v_x, v_y, d);
 }
 
-sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, int recursion_depth)
+sf::Color TraceRay(glm::vec3 O, glm::vec3 D, float t_min, float t_max, int recursion_depth)
 {
     float closest_t = inf;
     Sphere closest_sphere;
+    closest_sphere.null = true;
 
     float t1, t2;
+ 
+    ClosestIntersection(O, D, t_min, t_max, closest_sphere, closest_t);
 
-    ClosestIntersection(camera_vector, view_direction_vector, t_min, t_max, closest_sphere, closest_t);
-
-    if(!closest_sphere.exists)
+    if(!closest_sphere.null)
     {
         return sf::Color::Black;
     }
 
     //return closest_sphere.color;
-    glm::vec3 point = camera_vector + closest_t * view_direction_vector;
-    glm::vec3 normal = point - closest_sphere.location;
+    glm::vec3 point = O + closest_t * D;
+    glm::vec3 normal = point - closest_sphere.center;
     normal = glm::normalize(normal);
 
     sf::Color final_color = closest_sphere.color;
-    float light_intensity = ComputeLighting(point, normal, -view_direction_vector, closest_sphere.specular);
+    float light_intensity = ComputeLighting(point, normal, -D, closest_sphere.specular);
 
 
     float red = final_color.r * light_intensity;
@@ -208,7 +209,7 @@ sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, flo
         return final_color;
     }
     
-    glm::vec3 R = ReflectRay(-view_direction_vector, normal);
+    glm::vec3 R = ReflectRay(-D, normal);
     sf::Color reflected_color = TraceRay(point, R, 0.001f, inf, recursion_depth - 1);
 
     red = final_color.r * (1 - r) + reflected_color.r * r;
@@ -240,18 +241,18 @@ sf::Color TraceRay(glm::vec3 camera_vector, glm::vec3 view_direction_vector, flo
     return final_color;
 }
 
-void IntersectRaySphere(glm::vec3 camera_vector, glm::vec3 view_direction_vector, Sphere& sphere, float& t1, float& t2)
+void IntersectRaySphere(glm::vec3 O, glm::vec3 D, Sphere& sphere, float& t1, float& t2)
 {
     //std::cout << sphere.name << "\n";
     float r = sphere.radius;
 
-    glm::vec3 co = camera_vector - sphere.location;
+    glm::vec3 CO = O - sphere.center;
 
     //glm::vec3 glm_viewport_vector = glm::vec3(view_direction_vector.x, view_direction_vector.y, view_direction_vector.z);
 
-    float a = glm::dot(view_direction_vector, view_direction_vector);
-    float b = 2 * glm::dot(co, view_direction_vector);
-    float c = glm::dot(co, co) - r * r;
+    float a = glm::dot(O, D);
+    float b = 2 * glm::dot(CO, D);
+    float c = glm::dot(CO, CO) - r * r;
 
     float discriminant = b * b - 4 * a * c;
 
@@ -296,7 +297,7 @@ float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_directio
             Sphere shadow_sphere;
             float shadow_t;
             ClosestIntersection(point, l, 0.001f, t_max, shadow_sphere, shadow_t);
-            if(shadow_sphere.exists)
+            if(shadow_sphere.null)
             {
                 continue;
             }
@@ -327,24 +328,24 @@ float ComputeLighting(glm::vec3 point, glm::vec3 normal, glm::vec3 view_directio
     return intensity;
 }
 
-void ClosestIntersection(glm::vec3 camera_vector, glm::vec3 view_direction_vector, float t_min, float t_max, Sphere& closest_sphere, float& closest_t)
+void ClosestIntersection(glm::vec3 O, glm::vec3 D, float t_min, float t_max, Sphere& closest_sphere, float& closest_t)
 {
     closest_t = inf;
     float t1, t2;
     for(Sphere sphere : spheres)
     {
-        IntersectRaySphere(camera_vector, view_direction_vector, sphere, t1, t2);
+        IntersectRaySphere(O, D, sphere, t1, t2);
         if (t_min < t1 && t1 < t_max && t1 < closest_t)
         {
             closest_t = t1;
             closest_sphere = sphere;
-            closest_sphere.exists = true;
+            closest_sphere.null = true;
         }
         if (t_min < t2 && t2 < t_max && t2 < closest_t)
         {
             closest_t = t2;
             closest_sphere = sphere;
-            closest_sphere.exists = true;
+            closest_sphere.null = true;
         }
     }
 }
