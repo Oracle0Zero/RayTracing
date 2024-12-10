@@ -13,9 +13,17 @@ enum LightType{
 
 class Light 
 {
+private:
+    LightType m_type;
+    float m_intensity;
+    glm::vec3 m_position;
+    glm::vec3 m_direction;
 public:
-    LightType type;
-    float intensity;
-    glm::vec3 position;
-    glm::vec3 direction;
+    Light(LightType, float, glm::vec3, glm::vec3);
+    LightType getLightType();
+    float getLightIntensity();
+    glm::vec3 getLightPosition();
+    glm::vec3 getLightDirection();
+
+    void setLightIntensity(float);
 };

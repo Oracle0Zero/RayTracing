@@ -4,6 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <omp.h>
+
 #include "Sphere.h"
 #include "Light.h"
 
@@ -39,56 +41,38 @@ int main()
 {
     sf::RenderWindow window(sf::VideoMode(canvas_width, canvas_height), "SFML works!");
     
-    Sphere sphere_1;
-    sphere_1.center = glm::vec3(0, -1, 3);
-    sphere_1.radius = 1;
-    sphere_1.color = sf::Color::Red;
-    sphere_1.specular = 500;
-    sphere_1.reflective = 0.2f;
+    Sphere sphere_1{glm::vec3(0, -1, 3), 1, sf::Color::Red, "Red", 500, 0.2f, false};
     spheres.push_back(sphere_1);
 
-    Sphere sphere_2;
-    sphere_2.center = glm::vec3(2, 0, 4);
-    sphere_2.radius = 1;
-    sphere_2.color = sf::Color::Blue;
-    sphere_2.specular = 500;
-    sphere_2.reflective = 0.3f;
+    Sphere sphere_2{glm::vec3(2, 0, 4), 1, sf::Color::Blue, "Blue", 500, 0.3f, false};
     spheres.push_back(sphere_2);
 
-    Sphere sphere_3;
-    sphere_3.center = glm::vec3(-2, 0, 4);
-    sphere_3.radius = 1;
-    sphere_3.color = sf::Color::Green;
-    sphere_3.specular = 10;
-    sphere_3.reflective = 0.4f;
+    Sphere sphere_3{glm::vec3(-2, 0, 4), 1, sf::Color::Green, "Green", 10, 0.4f, false};
     spheres.push_back(sphere_3);
     
-    Sphere sphere_4;
-    sphere_4.center = glm::vec3(0, -5001, 0);
-    sphere_4.radius = 5000;
-    sphere_4.color = sf::Color::Yellow;
-    sphere_4.specular = 1000;
-    sphere_4.reflective = 0.5f;
+    Sphere sphere_4{glm::vec3(0, -5001, 0), 5000, sf::Color::Yellow, "Yellow", 1000,\
+      0.5f, false};
     spheres.push_back(sphere_4);
 
-    Light ambient;
-    ambient.type = LightType::AMBIENT;
-    ambient.intensity = 0.2f;
+    Light ambient{LightType::AMBIENT, 0.2f, glm::vec3(0.0f, 0.0f, 0.0f), \
+        glm::vec3(0.0f, 0.0f, 0.0f)};
     lights.push_back(ambient);
 
-    Light point;
-    point.type = LightType::POINT;
-    point.intensity = 0.6f;
-    point.position = glm::vec3(2, 1, 0);
+    Light point{LightType::POINT, 0.6f, glm::vec3(2, 1, 0), \
+        glm::vec3(0.0f, 0.0f, 0.0f)};
     lights.push_back(point);
 
-    Light directional;
-    directional.type = LightType::DIRECTIONAL;
-    directional.intensity = 0.2f;
-    directional.direction = glm::vec3(1, 4, 4);
+    Light directional{LightType::DIRECTIONAL, 0.2f, glm::vec3(0.0f, 0.0f, 0.0f), \
+        glm::vec3(1, 4, 4)};
     lights.push_back(directional);
     
     sf::RectangleShape pixel(sf::Vector2f(1, 1));
+
+    glm::vec3 viewport_vector;
+    glm::vec3 D;
+    sf::Color color;
+
+    sf::Color pixel_colors[canvas_width][canvas_height];    
 
     while (window.isOpen())
     {
@@ -101,23 +85,45 @@ int main()
 
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
         {
-            O.z -= 0.1f;
+            //O.z -= 0.1f;
+            lights[2].setLightIntensity(lights[2].getLightIntensity() + 0.1f);
+            printf("%f\n", lights[2].getLightIntensity());
         }
         else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
         {
-            O.z += 0.1f;
+            //O.z += 0.1f;
         }
 
         window.clear();
 
         for (int i = (- canvas_width / 2); i < (canvas_width / 2); ++i)
         {
+            #pragma omp parallel for private(viewport_vector, D, color)
             for (int j = (- canvas_height / 2); (j < canvas_height / 2); ++j)
             {
-                glm::vec3 viewport_vector = CanvasToViewPort(i, j);
-                glm::vec3 D = viewport_vector - O;
-                sf::Color color = TraceRay(O, D, 1.0f, inf, recursion_depth);
-                PutPixel(window, pixel, i, j, color);
+                viewport_vector = CanvasToViewPort(i, j);
+                D = viewport_vector - O;
+                color = TraceRay(O, D, 1.0f, inf, recursion_depth);
+
+                float c_x = (float)canvas_width / 2 + i;
+                float c_y = (float)canvas_height / 2 - j;
+
+                pixel_colors[static_cast<int>(c_x)][static_cast<int>(c_y)] = color;
+
+                //#pragma omp critical
+                //PutPixel(window, pixel, i, j, color);
+            }
+        }
+
+        
+        for (int i = 0; i < canvas_width; ++i)
+        {
+            for (int j = 0; j < canvas_height; ++j)
+            {
+                pixel.setPosition(i, j);
+                pixel.setFillColor(pixel_colors[i][j]);
+
+                window.draw(pixel);
             }
         }
 
@@ -150,82 +156,56 @@ sf::Color TraceRay(glm::vec3 O, glm::vec3 D, float t_min, float t_max, int recur
 {
     float closest_t = inf;
     Sphere closest_sphere;
-    closest_sphere.null = true;
-    //printf("%f\n", closest_t);
+    closest_sphere.setNull(true);
+
     ClosestIntersection(O, D, t_min, t_max, closest_sphere, closest_t);
-    /*
-    float t1 = 0.0f, t2 = 0.0f;
-    for(Sphere sphere : spheres)
-    {
-        IntersectRaySphere(O, D, sphere, t1, t2);
-       
-     
-        if(t_min < t1 && t1 < t_max && t1 < closest_t)
-        {
-            closest_t = t1;
-            closest_sphere = sphere;
-            closest_sphere.null = false;
-        }
 
-        if(t_min < t2 && t2 < t_max && t2 < closest_t)
-        {
-            closest_t = t2;
-            closest_sphere = sphere;
-            closest_sphere.null = false;
-        }
-    */
-
-    if(closest_sphere.null == true)
+    if(closest_sphere.getNull() == true)
     {
         return sf::Color(sf::Color::Black);
     }
 
     glm::vec3 p = O + closest_t * D;
-    glm::vec3 n = p - closest_sphere.center;
+    glm::vec3 n = p - closest_sphere.getCenter();
     n = glm::normalize(n);
 
-    float light_component = ComputeLighting(p, n, -D, closest_sphere.specular);
-    sf::Color local_color = closest_sphere.color;
+    float light_component = ComputeLighting(p, n, -D, closest_sphere.getSpecular());
+    sf::Color local_color = closest_sphere.getColor();
     float r = local_color.r * light_component;
     float g = local_color.g * light_component;
     float b = local_color.b * light_component;
 
-    if(r > 255){local_color.r = 255;} else {local_color.r = static_cast<uint8_t>(r);}
-    if(g > 255){local_color.g = 255;} else {local_color.g = static_cast<uint8_t>(g);}
-    if(b > 255){local_color.b = 255;} else {local_color.b = static_cast<uint8_t>(b);}
+    r > 255 ? local_color.r = 255 : local_color.r = static_cast<uint8_t>(r);
+    g > 255 ? local_color.g = 255 : local_color.g = static_cast<uint8_t>(g);
+    b > 255 ? local_color.b = 255 : local_color.b = static_cast<uint8_t>(b);
 
-    float reflectiveness = closest_sphere.reflective;
+    float reflectiveness = closest_sphere.getReflective();
     if(recursion_depth <= 0 || reflectiveness <= 0)
     {
-        //if(r > 255){local_color.r = 255;} else {local_color.r = static_cast<uint8_t>(r);}
-        //if(g > 255){local_color.g = 255;} else {local_color.g = static_cast<uint8_t>(g);}
-        //if(b > 255){local_color.b = 255;} else {local_color.b = static_cast<uint8_t>(b);}
-
         return local_color;
     }
 
     glm::vec3 R = ReflectRay(-D, n);
     sf::Color reflected_color;
     reflected_color = TraceRay(p, R, 0.1f, inf, recursion_depth - 1);
-    //if(r > 255){color.r = 255;} else {color.r = static_cast<uint8_t>(r);}
-    //if(g > 255){color.g = 255;} else {color.g = static_cast<uint8_t>(g);}
-    //if(b > 255){color.b = 255;} else {color.b = static_cast<uint8_t>(b);}
+
     float r_final = local_color.r * (1 - reflectiveness) + reflected_color.r * reflectiveness;
     float g_final = local_color.g * (1 - reflectiveness) + reflected_color.g * reflectiveness;
     float b_final = local_color.b * (1 - reflectiveness) + reflected_color.b * reflectiveness;
 
     sf::Color final_color;
-    if(r_final > 255){final_color.r = 255;} else {final_color.r = static_cast<uint8_t>(r_final);}
-    if(g_final > 255){final_color.g = 255;} else {final_color.g = static_cast<uint8_t>(g_final);}
-    if(b_final > 255){final_color.b = 255;} else {final_color.b = static_cast<uint8_t>(b_final);}
+
+    r_final > 255 ? final_color.r = 255 : final_color.r = static_cast<uint8_t>(r_final);
+    g_final > 255 ? final_color.g = 255 : final_color.g = static_cast<uint8_t>(g_final);
+    b_final > 255 ? final_color.r = 255 : final_color.b = static_cast<uint8_t>(b_final);
 
     return final_color;
 }
 
 void IntersectRaySphere(glm::vec3 O, glm::vec3 D, Sphere& sphere, float& t1, float& t2)
 {
-    float r = sphere.radius;
-    glm::vec3 CO = O - sphere.center;
+    float r = sphere.getRadius();
+    glm::vec3 CO = O - sphere.getCenter();
 
     float a = glm::dot(D, D);
     float b = 2 * glm::dot(CO, D);
@@ -253,27 +233,27 @@ float ComputeLighting(glm::vec3 p, glm::vec3 n, glm::vec3 v, int s)
     glm::vec3 L;
     for(Light light : lights)
     {
-        if(light.type == LightType::AMBIENT)
+        if(light.getLightType() == LightType::AMBIENT)
         {
-            intensity += light.intensity;
+            intensity += light.getLightIntensity();
         }else
         {
-            if(light.type == LightType::POINT)
+            if(light.getLightType() == LightType::POINT)
             {
-                L = light.position - p;
+                L = light.getLightPosition() - p;
                 t_max = 1;
             }else
             {
-                L = light.direction;
+                L = light.getLightDirection();
                 t_max = inf;
             }
 
             // Shadow Check
             Sphere shadow_sphere;
-            shadow_sphere.null = true;
+            shadow_sphere.setNull(true);
             float shadow_t;
             ClosestIntersection(p, L, 0.001f, t_max, shadow_sphere, shadow_t);
-            if(shadow_sphere.null == false)
+            if(shadow_sphere.getNull() == false)
             {
                 continue;
             }
@@ -282,18 +262,17 @@ float ComputeLighting(glm::vec3 p, glm::vec3 n, glm::vec3 v, int s)
             float n_dot_l = glm::dot(n, L);
             if(n_dot_l > 0)
             {
-                intensity += light.intensity * n_dot_l / (glm::length(n) * glm::length(L));
+                intensity += light.getLightIntensity() * n_dot_l / (glm::length(n) * glm::length(L));
             }
 
             // Specular
             if(s != -1)
             {
-                //glm::vec3 R = 2.0f*n*glm::dot(n, L) - L;
                 glm::vec3 R = ReflectRay(L, n);
                 float r_dot_v = glm::dot(R, v);
                 if(r_dot_v > 0)
                 {
-                    intensity += light.intensity * pow(r_dot_v / (glm::length(R)*glm::length(v)), s);
+                    intensity += light.getLightIntensity() * pow(r_dot_v / (glm::length(R)*glm::length(v)), s);
                 }
             }
         }
@@ -305,7 +284,6 @@ float ComputeLighting(glm::vec3 p, glm::vec3 n, glm::vec3 v, int s)
 void ClosestIntersection(glm::vec3 O, glm::vec3 D, float t_min, float t_max, Sphere& closest_sphere, float& closest_t)
 {
     closest_t = inf;
-    //printf("%f\n", closest_t);
     float t1 = 0.0f, t2 = 0.0f;
     for(Sphere sphere : spheres)
     {
@@ -315,14 +293,14 @@ void ClosestIntersection(glm::vec3 O, glm::vec3 D, float t_min, float t_max, Sph
         {
             closest_t = t1;
             closest_sphere = sphere;
-            closest_sphere.null = false;
+            closest_sphere.setNull(false);
         }
 
         if(t_min < t2 && t2 < t_max && t2 < closest_t)
         {
             closest_t = t2;
             closest_sphere = sphere;
-            closest_sphere.null = false;
+            closest_sphere.setNull(false);
         }
     }
 }
