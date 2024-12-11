@@ -19,6 +19,7 @@ private:
     glm::vec3 m_position;
     glm::vec3 m_direction;
 public:
+    Light();
     Light(LightType, float, glm::vec3, glm::vec3);
     LightType getLightType();
     float getLightIntensity();
