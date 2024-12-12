@@ -107,7 +107,6 @@ int main()
                 float c_x = (float)canvas_width / 2 + i;
                 float c_y = (float)canvas_height / 2 - j;
 
-                //pixel_colors_1D_array[static_cast<int>(c_x)*canvas_width + static_cast<int>(c_y)] = color;
                 pixel_colors[static_cast<int>(c_x)][static_cast<int>(c_y)] = color;
             }
         }
@@ -160,7 +159,7 @@ void ProcessEvents()
     {
         lights[1].setLightIntensity(lights[1].getLightIntensity() + 0.05f);
     }
-
+ 
 }
 
 void PutPixel(sf::RenderWindow& window, sf::RectangleShape& pixel, int x, int y, sf::Color color)
@@ -192,7 +191,7 @@ sf::Color TraceRay(glm::vec3 O, glm::vec3 D, float t_min, float t_max, int recur
 
     if(closest_sphere.getNull() == true)
     {
-        return sf::Color(sf::Color::Black);
+        return sf::Color(sf::Color::White);
     }
 
     glm::vec3 p = O + closest_t * D;
