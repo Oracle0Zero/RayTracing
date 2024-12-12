@@ -10,10 +10,10 @@
 #include "../include/Light.h"
 
 
-constexpr int canvas_width = 1280;
-constexpr int canvas_height = 720;
+constexpr int canvas_width = 800;
+constexpr int canvas_height = 800;
 
-constexpr float viewport_width = 2;
+constexpr float viewport_width = 1;
 constexpr float viewport_height = 1;
 
 int d = 1;
@@ -32,7 +32,6 @@ float closest_t = inf;
 std::vector<Sphere> spheres;
 std::vector<Light> lights;
 
-void PutPixel(sf::RenderWindow& window, sf::RectangleShape& pixel, int x, int y, sf::Color color);
 glm::vec3 CanvasToViewPort(int x, int y);
 sf::Color TraceRay(glm::vec3 O, glm::vec3 D, float t_min, float t_max, int recursion_depth);
 void IntersectRaySphere(glm::vec3 camera_vector, glm::vec3 view_direction_vector, Sphere& sphere, float& t1, float& t2);
@@ -44,7 +43,16 @@ void ProcessEvents();
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(canvas_width, canvas_height), "SFML works!");
-    
+
+    sf::Image frameBuffer;
+    frameBuffer.create(canvas_width, canvas_height, sf::Color::Black);
+
+    sf::Texture frameTexture;
+    sf::Sprite frameSprite;
+
+    unsigned int c_x_unsigned = 0;
+    unsigned int c_y_unsigned = 0;
+
     Sphere sphere_1{glm::vec3(0, -1, 3), 1, sf::Color::Red, "Red", 500, 0.2f, false};
     spheres.push_back(sphere_1);
 
@@ -96,7 +104,7 @@ int main()
        
         for (int i = (- canvas_width / 2); i < (canvas_width / 2); ++i)
         {
-            #pragma omp parallel for private(viewport_vector, D, color)
+            #pragma omp parallel for private(viewport_vector, D, color, c_x_unsigned, c_y_unsigned)
             for (int j = (- canvas_height / 2); (j < canvas_height / 2); ++j)
             {
                 viewport_vector = CanvasToViewPort(i, j);
@@ -104,23 +112,19 @@ int main()
 
                 color = TraceRay(O, D, 1.0f, inf, recursion_depth);
 
-                float c_x = (float)canvas_width / 2 + i;
-                float c_y = (float)canvas_height / 2 - j;
-
-                pixel_colors[static_cast<int>(c_x)][static_cast<int>(c_y)] = color;
+                c_x_unsigned = static_cast<u_int>((float)canvas_width / 2 + i);
+                c_y_unsigned = static_cast<u_int>((float)canvas_height / 2 - j);
+                if(c_x_unsigned >= 0 && c_x_unsigned < canvas_width && c_y_unsigned >= 0 && c_y_unsigned < canvas_height)
+                {
+                    frameBuffer.setPixel(c_x_unsigned, c_y_unsigned, color);
+                }
             }
         }
 
-        for (int i = 0; i < canvas_width; ++i)
-        {
-            for (int j = 0; j < canvas_height; ++j)
-            {
-                pixel.setPosition(i, j);
-                pixel.setFillColor(pixel_colors[i][j]);
-                window.draw(pixel);
-            }
-        }
+        frameTexture.loadFromImage(frameBuffer);
+        frameSprite.setTexture(frameTexture);
 
+        window.draw(frameSprite);
 
         window.display();
     }
@@ -162,17 +166,6 @@ void ProcessEvents()
  
 }
 
-void PutPixel(sf::RenderWindow& window, sf::RectangleShape& pixel, int x, int y, sf::Color color)
-{
-    float c_x = (float)canvas_width / 2 + x;
-    float c_y = (float)canvas_height / 2 - y;
-
-    pixel.setPosition(c_x, c_y);
-    pixel.setFillColor(color);
-
-    window.draw(pixel);
-}
-
 glm::vec3 CanvasToViewPort(int x, int y)
 {
    float v_x = x * ((float)viewport_width / (float)canvas_width);
@@ -191,7 +184,7 @@ sf::Color TraceRay(glm::vec3 O, glm::vec3 D, float t_min, float t_max, int recur
 
     if(closest_sphere.getNull() == true)
     {
-        return sf::Color(sf::Color::White);
+        return sf::Color(sf::Color::Black);
     }
 
     glm::vec3 p = O + closest_t * D;
